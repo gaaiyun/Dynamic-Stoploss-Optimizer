@@ -1,4 +1,10 @@
+# v2 core
 numpy>=1.24.0
 pandas>=2.0.0
-matplotlib>=3.7.0
-scipy>=1.10.0
+scipy>=1.10.0           # Deflated Sharpe Ratio 用 scipy.stats.norm
+
+# 可选：从 yfinance 取真数据
+# pip install yfinance
+
+# 可选：v1 legacy 的可视化（v2 不强依赖）
+# pip install matplotlib
