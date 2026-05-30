@@ -2,13 +2,13 @@
 
 ## 5 分钟上手指南
 
-### 1️⃣ 安装依赖
+### 1. 安装依赖
 
 ```bash
 pip install numpy pandas
 ```
 
-### 2️⃣ 导入模块
+### 2. 导入模块
 
 ```python
 from dynamic-stoploss import (
@@ -17,7 +17,7 @@ from dynamic-stoploss import (
 )
 ```
 
-### 3️⃣ 准备数据
+### 3. 准备数据
 
 ```python
 import pandas as pd
@@ -33,7 +33,7 @@ data = df[['Open', 'High', 'Low', 'Close']].rename(
 )
 ```
 
-### 4️⃣ 创建策略
+### 4. 创建策略
 
 ```python
 # ATR 止损策略
@@ -47,7 +47,7 @@ ma_strategy = MAStoploss(period=50, ma_type='ema')
 dd_strategy = MaxDrawdownStoploss(max_drawdown=0.10)
 ```
 
-### 5️⃣ 运行回测
+### 5. 运行回测
 
 ```python
 # 创建回测器
@@ -69,7 +69,7 @@ result = backtester.run(
 print(result.summary())
 ```
 
-### 6️⃣ 优化参数
+### 6. 优化参数
 
 ```python
 from dynamic-stoploss import StoplossOptimizer
@@ -165,11 +165,11 @@ A: `result.to_dict()` 可转换为字典，然后保存为 CSV 或 JSON。
 
 ## 下一步
 
-- 📖 查看 `README.md` 了解完整 API
-- 📝 运行 `example_usage.py` 查看更多示例
-- 🧪 运行 `test_stoploss.py` 了解测试方法
-- 🔧 修改参数，测试你自己的策略！
+- 查看 `README.md` 了解完整 API
+- 运行 `example_usage.py` 查看更多示例
+- 运行 `test_stoploss.py` 了解测试方法
+- 修改参数，测试你自己的策略
 
 ---
 
-**✨ 派蒙提示：止损是保护本金的关键！但也要记住，好的止损策略需要配合好的入场策略哦~**
+注：止损是保护本金的关键，但好的止损策略需要配合好的入场策略。

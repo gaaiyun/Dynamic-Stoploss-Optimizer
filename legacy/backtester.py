@@ -1,7 +1,7 @@
 """
 回测模块
 
-派蒙的回测引擎！可以测试不同止损策略的历史表现~
+对不同止损策略在历史数据上的表现进行回测。
 """
 
 import numpy as np
@@ -138,9 +138,9 @@ class BacktestResult:
 class StoplossBacktester:
     """
     止损策略回测器
-    
-    派蒙精心打造的回测引擎！可以测试不同止损策略在历史数据上的表现。
-    
+
+    用于测试不同止损策略在历史数据上的表现。
+
     参数:
         data: 包含 OHLC 数据的 DataFrame，必须有 'open', 'high', 'low', 'close' 列
         initial_capital: 初始资金 (默认 100000)

@@ -222,8 +222,7 @@ pytest tests/
 ## v1（legacy）
 
 v1 的 4 个停损 + 单 grid optimizer + 简单 backtest 保留在 [`legacy/`](./legacy/)
-下，供需要参考的人查阅。v1 API 不再演进，v1 的 README 也有派蒙 / OpenClaw 等
-AI 痕迹，仅作历史归档。
+下，供需要参考的人查阅。v1 API 不再演进，仅作历史归档。
 
 ## 已知限制
 

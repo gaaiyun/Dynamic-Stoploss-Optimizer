@@ -1,7 +1,7 @@
 """
-动态止损策略测试模块
+动态止损策略测试模块 (v1, legacy)
 
-派蒙的测试用例！确保所有止损策略都能正常工作~
+确保所有止损策略都能正常工作。
 """
 
 import numpy as np
@@ -370,7 +370,7 @@ def test_integration_all_strategies():
 
 if __name__ == '__main__':
     # 运行简单测试
-    print("派蒙开始运行测试啦~ ✨")
+    print("开始运行测试")
     
     # 生成测试数据
     data = generate_sample_data(n_days=252)
@@ -385,7 +385,7 @@ if __name__ == '__main__':
     
     backtester = StoplossBacktester(data, initial_capital=100000)
     
-    print("\n📊 回测结果对比：")
+    print("\n回测结果对比：")
     print("=" * 60)
     
     for strategy in strategies:
@@ -397,4 +397,4 @@ if __name__ == '__main__':
         print(f"  胜率：{result.win_rate:.2%}")
         print(f"  交易次数：{result.total_trades}")
     
-    print("\n✨ 派蒙测试完成啦！所有策略都能正常工作~")
+    print("\n测试完成，所有策略都能正常工作")

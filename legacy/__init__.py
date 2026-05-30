@@ -1,7 +1,7 @@
 """
-Dynamic Stoploss Optimizer - 动态止损策略优化器
+Dynamic Stoploss Optimizer - 动态止损策略优化器 (v1, legacy)
 
-派蒙的最强止损策略工具包！包含多种动态止损算法和回测功能。
+包含多种动态止损算法和回测功能。
 """
 
 try:
@@ -26,7 +26,6 @@ except ImportError:
     from optimizer import StoplossOptimizer
 
 __version__ = '1.0.0'
-__author__ = '派蒙 ⭐'
 
 __all__ = [
     'BaseStoploss',
