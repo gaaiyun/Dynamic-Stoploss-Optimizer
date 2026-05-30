@@ -1,14 +1,15 @@
-# 动态止损策略优化器 - 项目总结
+# 动态止损策略优化器 - 项目总结 (v1, legacy)
 
-## 📋 项目信息
+## 项目信息
 
 - **项目名称**: Dynamic Stoploss Optimizer (动态止损策略优化器)
 - **版本**: 1.0.0
 - **创建日期**: 2026-02-28
-- **作者**: 派蒙 ⭐
-- **位置**: `skills/dynamic-stoploss/`
 
-## ✅ 完成的功能
+> 说明：本文件描述的是 v1（legacy）版本。当前在用的是 v2（`src/dso/`），
+> 详见仓库根目录 `README.md`。
+
+## 完成的功能
 
 ### 1. 核心止损策略 (stoploss_strategies.py)
 
@@ -16,10 +17,10 @@
 
 | 策略 | 类名 | 核心逻辑 | 参数 |
 |-----|------|---------|------|
-| **波动率止损** | `VolatilityStoploss` | 根据历史波动率动态调整止损幅度 | window, multiplier, use_log_returns |
-| **ATR 止损** | `ATRStoploss` | 使用平均真实波幅计算止损位 | period, multiplier, use_current_atr |
-| **均线止损** | `MAStoploss` | 使用移动平均线作为动态止损位 | period, ma_type, offset |
-| **最大回撤止损** | `MaxDrawdownStoploss` | 监控回撤，超过阈值触发止损 | max_drawdown, use_entry_price |
+| 波动率止损 | `VolatilityStoploss` | 根据历史波动率动态调整止损幅度 | window, multiplier, use_log_returns |
+| ATR 止损 | `ATRStoploss` | 使用平均真实波幅计算止损位 | period, multiplier, use_current_atr |
+| 均线止损 | `MAStoploss` | 使用移动平均线作为动态止损位 | period, ma_type, offset |
+| 最大回撤止损 | `MaxDrawdownStoploss` | 监控回撤，超过阈值触发止损 | max_drawdown, use_entry_price |
 
 **代码行数**: ~450 行
 
@@ -27,14 +28,14 @@
 
 完整的回测引擎功能：
 
-- ✅ 支持做多/做空
-- ✅ 支持自定义入场信号
-- ✅ 支持止盈目标
-- ✅ 计算交易佣金和滑点
-- ✅ 生成详细的性能指标
-- ✅ 权益曲线追踪
-- ✅ 多策略对比
-- ✅ 可视化支持 (matplotlib)
+- 支持做多/做空
+- 支持自定义入场信号
+- 支持止盈目标
+- 计算交易佣金和滑点
+- 生成详细的性能指标
+- 权益曲线追踪
+- 多策略对比
+- 可视化支持 (matplotlib)
 
 **关键指标**:
 - 总收益率、年化收益率
@@ -49,12 +50,12 @@
 
 参数优化工具：
 
-- ✅ 网格搜索 (Grid Search)
-- ✅ 随机搜索 (Random Search)
-- ✅ 并行计算支持
-- ✅ 多指标优化 (夏普比率、收益率、回撤等)
-- ✅ 优化历史追踪
-- ✅ 结果可视化
+- 网格搜索 (Grid Search)
+- 随机搜索 (Random Search)
+- 并行计算支持
+- 多指标优化 (夏普比率、收益率、回撤等)
+- 优化历史追踪
+- 结果可视化
 
 **代码行数**: ~280 行
 
@@ -62,13 +63,11 @@
 
 全面的单元测试：
 
-- ✅ 策略初始化测试
-- ✅ 止损计算测试
-- ✅ 回测功能测试
-- ✅ 参数优化测试
-- ✅ 集成测试
-
-**测试覆盖率**: 核心功能 100%
+- 策略初始化测试
+- 止损计算测试
+- 回测功能测试
+- 参数优化测试
+- 集成测试
 
 **代码行数**: ~380 行
 
@@ -90,20 +89,19 @@
 
 | 文档 | 内容 |
 |-----|------|
-| **SKILL.md** | 技能描述和使用方法 |
-| **README.md** | 完整项目文档和 API 参考 |
-| **QUICKSTART.md** | 5 分钟快速上手指南 |
-| **PROJECT_SUMMARY.md** | 项目总结 (本文件) |
+| README.md | 完整项目文档和 API 参考 |
+| QUICKSTART.md | 快速上手指南 |
+| PROJECT_SUMMARY.md | 项目总结 (本文件) |
 
-## 📊 项目统计
+## 项目统计
 
 - **总代码行数**: ~2,300 行
 - **Python 文件**: 6 个
-- **文档文件**: 4 个
+- **文档文件**: 3 个
 - **测试用例**: 20+ 个
 - **依赖**: numpy, pandas, matplotlib (可选), scipy (可选)
 
-## 🎯 设计亮点
+## 设计亮点
 
 ### 1. 模块化设计
 - 策略、回测、优化分离
@@ -125,12 +123,7 @@
 - 详细的文档
 - 清晰的错误提示
 
-### 5. 派蒙风格
-- 可爱的输出信息
-- 友好的提示
-- 专业的功能 + 有趣的体验
-
-## 🔧 技术栈
+## 技术栈
 
 - **Python**: 3.8+
 - **核心库**: numpy, pandas
@@ -138,45 +131,30 @@
 - **数据源**: yfinance (可选)
 - **测试**: pytest (可选)
 
-## 📁 文件结构
+## 文件结构
 
 ```
-skills/dynamic-stoploss/
+legacy/
 ├── __init__.py              # 包初始化，导出公共接口
 ├── stoploss_strategies.py   # 核心止损策略实现
 ├── backtester.py            # 回测引擎
 ├── optimizer.py             # 参数优化器
 ├── test_stoploss.py         # 单元测试
 ├── example_usage.py         # 使用示例
-├── requirements.txt         # 依赖列表
-├── SKILL.md                 # 技能描述
 ├── README.md                # 完整文档
 ├── QUICKSTART.md            # 快速开始
 └── PROJECT_SUMMARY.md       # 项目总结
 ```
 
-## 🚀 使用方法
-
-### 作为 OpenClaw Skill 使用
-
-```python
-from skills.dynamic-stoploss import (
-    ATRStoploss,
-    StoplossBacktester
-)
-
-# 使用方式与普通 Python 包相同
-```
-
-### 独立使用
+## 使用方法
 
 ```bash
-cd skills/dynamic-stoploss
+cd legacy
 python example_usage.py  # 运行示例
 python test_stoploss.py  # 运行测试
 ```
 
-## 📈 回测结果示例
+## 回测结果示例
 
 使用示例数据测试（252 天）：
 
@@ -189,7 +167,7 @@ python test_stoploss.py  # 运行测试
 
 **注**: 使用简单买入持有策略，未优化入场信号。实际使用时应结合更好的入场策略。
 
-## 💡 改进建议
+## 改进建议
 
 ### 短期改进
 1. 添加更多止损策略（如 Chandelier Exit、Volatility Stop 等）
@@ -206,26 +184,15 @@ python test_stoploss.py  # 运行测试
 2. 支持实盘交易
 3. 云端回测服务
 
-## ⚠️ 风险提示
+## 风险提示
 
-1. **历史回测不代表未来表现**
-2. **止损策略需配合入场策略使用**
-3. **注意过拟合风险**
-4. **实盘前需充分测试**
+1. 历史回测不代表未来表现
+2. 止损策略需配合入场策略使用
+3. 注意过拟合风险
+4. 实盘前需充分测试
 
-## 🎉 项目成果
+## 致谢
 
-✅ 完成了所有计划功能
-✅ 代码质量高，测试覆盖全面
-✅ 文档完善，易于使用
-✅ 派蒙风格，用户体验好
-
-## 🙏 致谢
-
-感谢以下项目提供的灵感：
+参考项目：
 - [pybroker](https://github.com/edwardlee91/pybroker) - Python 算法交易框架
 - [ML for Trading Book](https://github.com/stefan-jansen/machine-learning-for-trading)
-
----
-
-**✨ 派蒙的最强止损策略工具包完成啦！旅行者，快去用它在市场上大显身手吧~ ⭐**
