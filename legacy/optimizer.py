@@ -1,7 +1,7 @@
 """
 参数优化器模块
 
-派蒙的参数优化工具！帮助找到最优的止损策略参数~
+通过网格搜索 / 随机搜索为止损策略寻找最优参数。
 """
 
 import numpy as np
@@ -69,7 +69,7 @@ class StoplossOptimizer:
         all_combinations = list(product(*param_values))
         
         if verbose:
-            print(f"派蒙开始优化啦~ 共 {len(all_combinations)} 种参数组合")
+            print(f"开始网格搜索，共 {len(all_combinations)} 种参数组合")
         
         results = []
         
@@ -106,7 +106,7 @@ class StoplossOptimizer:
         best_params, best_score = results[best_idx]
         
         if verbose:
-            print(f"\n✨ 派蒙找到最优参数啦！")
+            print(f"\n找到最优参数：")
             print(f"  最优参数：{best_params}")
             print(f"  最优 {metric}: {best_score:.4f}")
         
@@ -186,7 +186,7 @@ class StoplossOptimizer:
             最优参数字典
         """
         if verbose:
-            print(f"派蒙开始随机搜索优化~ 共 {n_iter} 次迭代")
+            print(f"开始随机搜索，共 {n_iter} 次迭代")
         
         results = []
         
@@ -215,7 +215,7 @@ class StoplossOptimizer:
         best_params, best_score = results[best_idx]
         
         if verbose:
-            print(f"\n✨ 派蒙找到最优参数啦！")
+            print(f"\n找到最优参数：")
             print(f"  最优参数：{best_params}")
             print(f"  最优 {metric}: {best_score:.4f}")
         

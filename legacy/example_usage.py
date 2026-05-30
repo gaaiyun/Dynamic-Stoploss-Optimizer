@@ -1,7 +1,7 @@
 """
 动态止损策略优化器 - 使用示例
 
-派蒙的使用指南！教你如何使用止损策略工具包~
+演示止损策略工具包的常见用法。
 """
 
 import numpy as np
@@ -76,7 +76,7 @@ def example_1_basic_stoploss():
     entry_price = 100.0
     current_bar = 100
     
-    print("\n📊 当前价格：${:.2f}".format(data['close'].iloc[current_bar]))
+    print("\n当前价格：${:.2f}".format(data['close'].iloc[current_bar]))
     print(f"入场价格：${entry_price}")
     
     strategies = [vol_stop, atr_stop, ma_stop, dd_stop]
@@ -91,7 +91,7 @@ def example_1_basic_stoploss():
         
         print(f"\n{strategy.name.upper()} 止损策略:")
         print(f"  止损价格：${signal.stop_price:.2f}" if signal.stop_price else "  止损价格：N/A")
-        print(f"  是否触发：{'是 ⚠️' if signal.triggered else '否 ✅'}")
+        print(f"  是否触发：{'是' if signal.triggered else '否'}")
         if signal.metadata:
             print(f"  详细信息：{signal.metadata}")
 
@@ -117,7 +117,7 @@ def example_2_backtesting():
     strategy = ATRStoploss(period=14, multiplier=2.5)
     
     # 运行回测
-    print("\n🚀 开始回测...")
+    print("\n开始回测...")
     result = backtester.run(
         strategy=strategy,
         position_type='long',
@@ -129,7 +129,7 @@ def example_2_backtesting():
     print(result.summary())
     
     # 访问详细数据
-    print("\n📈 详细指标:")
+    print("\n详细指标:")
     print(f"  最终资金：${result.final_capital:,.2f}")
     print(f"  盈利交易：{result.winning_trades} 笔")
     print(f"  亏损交易：{result.losing_trades} 笔")
@@ -162,7 +162,7 @@ def example_3_strategy_comparison():
     ]
     
     # 运行回测并对比
-    print("\n📊 策略对比结果:\n")
+    print("\n策略对比结果:\n")
     
     results = []
     for strategy in strategies:
@@ -200,7 +200,7 @@ def example_4_parameter_optimization():
     optimizer = StoplossOptimizer(strategy, backtester, n_jobs=1)
     
     # 网格搜索
-    print("\n🔍 开始网格搜索优化...")
+    print("\n开始网格搜索优化...")
     param_grid = {
         'period': [10, 14, 20],
         'multiplier': [1.5, 2.0, 2.5, 3.0]
@@ -213,14 +213,14 @@ def example_4_parameter_optimization():
         verbose=True
     )
     
-    print("\n✨ 最优参数:")
+    print("\n最优参数:")
     print(f"  period: {result['best_params']['period']}")
     print(f"  multiplier: {result['best_params']['multiplier']}")
     print(f"  夏普比率：{result['best_score']:.2f}")
     
     # 获取优化历史
     summary_df = optimizer.get_optimization_summary()
-    print("\n📊 所有参数组合表现:")
+    print("\n所有参数组合表现:")
     print(summary_df.head(10).to_string(index=False))
 
 
@@ -243,7 +243,7 @@ def example_5_custom_entry_signal():
         (data['sma_20'].shift(1) <= data['sma_50'].shift(1))
     )
     
-    print(f"\n📊 入场信号数量：{entry_signal.sum()} 次")
+    print(f"\n入场信号数量：{entry_signal.sum()} 次")
     
     # 回测
     backtester = StoplossBacktester(data, initial_capital=100000)
@@ -268,12 +268,12 @@ def example_6_real_data():
         import yfinance as yf
         
         # 下载数据
-        print("\n📥 下载 AAPL 数据...")
+        print("\n下载 AAPL 数据...")
         ticker = yf.Ticker("AAPL")
         df = ticker.history(period="2y", interval="1d")
         
         if df.empty:
-            print("❌ 无法获取数据，使用模拟数据演示")
+            print("无法获取数据，使用模拟数据演示")
             df = generate_sample_data(n_days=504)
         
         # 重命名列
@@ -281,7 +281,7 @@ def example_6_real_data():
         data = data.reset_index()
         data = data.rename(columns={'date': 'date'})
         
-        print(f"✅ 数据加载成功：{len(data)} 天")
+        print(f"数据加载成功：{len(data)} 天")
         
         # 回测
         backtester = StoplossBacktester(data, initial_capital=100000)
@@ -291,8 +291,8 @@ def example_6_real_data():
         print(result.summary())
         
     except ImportError:
-        print("\n⚠️  未安装 yfinance，使用模拟数据演示")
-        print("💡 安装方法：pip install yfinance")
+        print("\n未安装 yfinance，使用模拟数据演示")
+        print("安装方法：pip install yfinance")
         
         # 使用模拟数据
         data = generate_sample_data(n_days=504)
@@ -348,20 +348,19 @@ def example_7_visualization():
         
         plt.tight_layout()
         plt.savefig('stoploss_comparison.png', dpi=300, bbox_inches='tight')
-        print("✅ 图表已保存：stoploss_comparison.png")
+        print("图表已保存：stoploss_comparison.png")
         plt.show()
         
     except ImportError:
-        print("\n⚠️  未安装 matplotlib")
-        print("💡 安装方法：pip install matplotlib")
+        print("\n未安装 matplotlib")
+        print("安装方法：pip install matplotlib")
 
 
 def main():
     """运行所有示例"""
-    print("\n" + "🌟" * 30)
-    print("✨  动态止损策略优化器 - 使用示例  ✨")
-    print("🌟" * 30)
-    print("\n派蒙来教你如何使用止损策略工具包啦~")
+    print("\n" + "=" * 60)
+    print("动态止损策略优化器 - 使用示例")
+    print("=" * 60)
     
     # 运行示例
     example_1_basic_stoploss()
@@ -373,14 +372,14 @@ def main():
     # example_7_visualization()  # 可选，需要 matplotlib
     
     print("\n" + "="*60)
-    print("✨ 派蒙的示例演示完成啦！")
+    print("示例演示完成")
     print("="*60)
-    print("\n💡 提示:")
+    print("\n提示:")
     print("  - 修改参数来测试不同的止损策略")
     print("  - 使用真实数据进行回测")
     print("  - 结合自己的交易策略使用")
     print("  - 注意过拟合风险，在不同市场环境下测试")
-    print("\n📚 更多信息请查看 SKILL.md 和源代码")
+    print("\n更多信息请查看 SKILL.md 和源代码")
     print("\n")
 
 
