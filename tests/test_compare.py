@@ -1,9 +1,8 @@
 """compare.py 测试。"""
 from __future__ import annotations
 
-import pandas as pd
 
-from dso.compare import StrategyComparison, StrategyRow, compare_stops
+from dso.compare import StrategyRow, compare_stops
 from dso.stops import ATRStop, ChandelierStop, TimeStop
 
 

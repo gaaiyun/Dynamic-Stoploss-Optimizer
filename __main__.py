@@ -1,12 +1,12 @@
 """Dynamic Stoploss Optimizer CLI（v2）。
 
 子命令：
-    list-stops          列 8 个内置停损策略 + 默认参数
+    list-stops          列 9 个内置停损策略 + 默认参数
     backtest            跑单策略回测
-    compare             8 个策略同数据对比 + Deflated Sharpe Ratio
-    regime              ADX 市场状态检测 + 推荐停损
+    compare             9 个策略同数据对比 + Deflated Sharpe Ratio
+    regime              ADX 市场状态检测 + 启发式候选停损
     walk-forward        滚动训练 + 样本外评估
-    attribution         拆 P/L 入场 vs 停损贡献
+    attribution         实际退出相对最大有利变动的实现差距
     fetch               从 yfinance 抓 OHLCV
 """
 from __future__ import annotations
@@ -66,6 +66,7 @@ def cmd_backtest(args) -> int:
         commission_pct=args.commission,
         slippage_pct=args.slippage,
         initial_capital=args.initial_cash,
+        position_fraction=args.position_fraction,
     )
     print(json.dumps({
         "stop": args.stop,
@@ -100,6 +101,7 @@ def cmd_compare(args) -> int:
         commission_pct=args.commission,
         slippage_pct=args.slippage,
         initial_capital=args.initial_cash,
+        position_fraction=args.position_fraction,
     )
     print(cmp.to_table())
     if args.output:
@@ -147,6 +149,7 @@ def cmd_walk_forward(args) -> int:
         n_folds=args.n_folds, mode=args.mode, side=args.side,
         commission_pct=args.commission, slippage_pct=args.slippage,
         initial_capital=args.initial_cash,
+        position_fraction=args.position_fraction,
     )
     print(json.dumps(result.to_dict(), ensure_ascii=False, indent=2))
     if args.output:
@@ -165,7 +168,8 @@ def cmd_attribution(args) -> int:
     stop = STOPS[args.stop]()
     result = run_backtest(df, stop, side=args.side,
                            commission_pct=args.commission,
-                           initial_capital=args.initial_cash)
+                           initial_capital=args.initial_cash,
+                           position_fraction=args.position_fraction)
     report = attribute_pnl(result, df)
     print(json.dumps(report.to_dict(), ensure_ascii=False, indent=2))
     if args.output:
@@ -211,6 +215,8 @@ def _add_backtest_args(sp: argparse.ArgumentParser) -> None:
     sp.add_argument("--commission", type=float, default=0.001)
     sp.add_argument("--slippage", type=float, default=0.0)
     sp.add_argument("--initial-cash", type=float, default=100_000.0)
+    sp.add_argument("--position-fraction", type=float, default=1.0,
+                    help="每次使用当前权益的比例，范围 (0, 1]")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -228,13 +234,13 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("-o", "--output")
     sp.set_defaults(func=cmd_backtest)
 
-    sp = sub.add_parser("compare", help="8 策略对比 + Deflated Sharpe")
+    sp = sub.add_parser("compare", help="9 策略对比 + Deflated Sharpe")
     _add_data_args(sp)
     _add_backtest_args(sp)
     sp.add_argument("-o", "--output")
     sp.set_defaults(func=cmd_compare)
 
-    sp = sub.add_parser("regime", help="ADX 状态检测 + 推荐停损")
+    sp = sub.add_parser("regime", help="ADX 状态检测 + 启发式候选停损")
     _add_data_args(sp)
     sp.add_argument("-o", "--output")
     sp.set_defaults(func=cmd_regime)
@@ -249,7 +255,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sp.add_argument("-o", "--output")
     sp.set_defaults(func=cmd_walk_forward)
 
-    sp = sub.add_parser("attribution", help="拆 P/L 入场 vs 停损贡献")
+    sp = sub.add_parser("attribution", help="实际退出相对 MFE 的实现差距")
     sp.add_argument("--stop", required=True, choices=list(STOPS))
     _add_data_args(sp)
     _add_backtest_args(sp)

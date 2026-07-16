@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "dynamic-stoploss-optimizer"
 version = "2.0.0"
-description = "8 个学界经典停损策略 + walk-forward + triple-barrier + Deflated Sharpe Ratio 全套研究框架"
+description = "9 个动态止损策略的可复现实验框架，含 walk-forward、事件回测与 Deflated Sharpe Ratio"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -44,3 +44,6 @@ include = ["dso*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --tb=short"
+
+[tool.ruff]
+exclude = ["legacy"]

@@ -5,12 +5,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
 
-from .backtest import BacktestResult, run_backtest
+from .backtest import run_backtest
 from .metrics import (
     calmar_ratio, deflated_sharpe_ratio, max_drawdown,
     returns_from_equity, sharpe_ratio, sortino_ratio,
@@ -92,6 +92,7 @@ def compare_stops(
     commission_pct: float = 0.001,
     slippage_pct: float = 0.0,
     initial_capital: float = 100_000.0,
+    position_fraction: float = 1.0,
     periods_per_year: int = 252,
 ) -> StrategyComparison:
     """对一组 stops 同数据同 entry signal 跑回测，按 Sharpe 排序。
@@ -116,6 +117,7 @@ def compare_stops(
             commission_pct=commission_pct,
             slippage_pct=slippage_pct,
             initial_capital=initial_capital,
+            position_fraction=position_fraction,
         )
         rets = returns_from_equity(result.equity_curve)
         sr = sharpe_ratio(rets, periods_per_year=periods_per_year)
@@ -152,6 +154,7 @@ def compare_stops(
                 n_obs=len(best_returns),
                 skewness=skew,
                 kurtosis=kurt,
+                periods_per_year=periods_per_year,
             )
         except ImportError:
             dsr_prob = 0.0

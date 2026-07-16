@@ -8,6 +8,16 @@ from dso.backtest import (
     BacktestResult, Trade, _resolve_signals, _to_bars, run_backtest,
 )
 from dso.stops import ATRStop, TimeStop
+from dso.stops.base import BaseStop, Bar
+
+
+class FixedStop(BaseStop):
+    """用于验证成交时序的固定价格止损。"""
+
+    DEFAULT_PARAMS = {"stop_price": 95.0}
+
+    def _update_stop(self, bar: Bar):
+        return float(self.params["stop_price"])
 
 
 # --- helpers ---------------------------------------------------------
@@ -62,6 +72,79 @@ def test_backtest_initial_capital_default():
 def test_backtest_equity_curve_length_matches(synth_uptrend_df):
     result = run_backtest(synth_uptrend_df, ATRStop())
     assert len(result.equity_curve) == len(synth_uptrend_df)
+
+
+def test_close_entry_cannot_be_stopped_by_earlier_same_bar_low():
+    df = pd.DataFrame({
+        "open": [100, 100], "high": [110, 108],
+        "low": [90, 96], "close": [100, 105], "volume": [1, 1],
+    })
+    result = run_backtest(
+        df, FixedStop(), entry_signal=[True, False], commission_pct=0.0,
+    )
+    assert result.n_stopped == 0
+    assert result.trades[0].exit_reason == "end"
+    assert result.trades[0].pnl == pytest.approx(5_000.0)
+
+
+def test_gap_through_stop_executes_at_open_not_unavailable_stop_price():
+    df = pd.DataFrame({
+        "open": [100, 90], "high": [102, 92],
+        "low": [99, 85], "close": [100, 88], "volume": [1, 1],
+    })
+    result = run_backtest(
+        df, FixedStop(), entry_signal=[True, False], commission_pct=0.0,
+    )
+    trade = result.trades[0]
+    assert trade.exit_reason == "stop"
+    assert trade.exit_price == pytest.approx(90.0)
+    assert trade.pnl == pytest.approx(-10_000.0)
+
+
+def test_equity_curve_marks_open_position_and_includes_final_close():
+    df = pd.DataFrame({
+        "open": [100, 105, 108], "high": [101, 111, 109],
+        "low": [99, 104, 104], "close": [100, 110, 105], "volume": [1, 1, 1],
+    })
+    result = run_backtest(
+        df, FixedStop(stop_price=50),
+        entry_signal=[True, False, False], commission_pct=0.0,
+    )
+    assert result.equity_curve[1] == pytest.approx(110_000.0)
+    assert result.equity_curve[-1] == pytest.approx(result.final_equity)
+    assert result.final_equity == pytest.approx(105_000.0)
+
+
+def test_allow_overlap_rejected_in_single_position_engine(synth_uptrend_df):
+    with pytest.raises(NotImplementedError, match="overlap"):
+        run_backtest(synth_uptrend_df, ATRStop(), allow_overlap=True)
+
+
+def test_empty_dataframe_rejected():
+    with pytest.raises(ValueError, match="空"):
+        run_backtest(pd.DataFrame(), ATRStop())
+
+
+def test_position_fraction_scales_exposure():
+    df = pd.DataFrame({
+        "open": [100, 105], "high": [101, 111],
+        "low": [99, 104], "close": [100, 110], "volume": [1, 1],
+    })
+    result = run_backtest(
+        df, FixedStop(stop_price=50), entry_signal=[True, False],
+        commission_pct=0.0, position_fraction=0.5,
+    )
+    assert result.final_equity == pytest.approx(105_000.0)
+
+
+def test_final_bar_does_not_open_zero_horizon_trade():
+    df = pd.DataFrame({
+        "open": [100], "high": [101], "low": [99],
+        "close": [100], "volume": [1],
+    })
+    result = run_backtest(df, FixedStop(), commission_pct=0.01)
+    assert result.n_trades == 0
+    assert result.final_equity == 100_000.0
 
 
 def test_backtest_profit_target_triggers(synth_uptrend_df):
