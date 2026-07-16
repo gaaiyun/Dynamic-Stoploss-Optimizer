@@ -6,8 +6,8 @@
     2. 止盈 barrier（horizontal upper）—— ``profit_target_pct`` 参数
     3. 时间 barrier（vertical）—— ``max_holding_bars`` 参数
 
-任一 barrier 先到即平仓。如果 entry signal 多次触发，按 ``allow_overlap``
-决定是否允许同时持仓。
+任一 barrier 先到即平仓。引擎当前只维护一笔持仓；重叠持仓会显式拒绝，
+避免一个 stop state 被多笔交易共享。
 
 参考：Lopez de Prado (2018), *Advances in Financial Machine Learning*,
 Chapter 3 "Labeling".
@@ -15,7 +15,7 @@ Chapter 3 "Labeling".
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 import pandas as pd
 
@@ -31,9 +31,10 @@ class Trade:
     side: str
     exit_reason: str             # "stop" / "profit" / "time" / "end"
     n_bars: int
-    pnl: float                   # 单笔 PnL（不考虑佣金前）
+    pnl: float                   # 单笔净 PnL（已扣佣金与滑点）
     pnl_pct: float
     commission: float
+    quantity: float = 1.0
     final_stop: Optional[float] = None    # 平仓时止损价
 
     def to_dict(self) -> dict:
@@ -46,7 +47,7 @@ class BacktestResult:
     stop_name: str
     stop_params: dict
     trades: List[Trade] = field(default_factory=list)
-    equity_curve: List[float] = field(default_factory=list)    # 每根 bar 的累积 PnL
+    equity_curve: List[float] = field(default_factory=list)    # 每根 bar 的盯市权益
     initial_capital: float = 100_000.0
     final_equity: float = 0.0
     n_signals: int = 0
@@ -123,7 +124,7 @@ def _resolve_signals(df: pd.DataFrame,
     if entry_signal is None:
         return [True] * n_bars
     if isinstance(entry_signal, pd.Series):
-        return [bool(x) for x in entry_signal.fillna(False).tolist()]
+        return [False if pd.isna(x) else bool(x) for x in entry_signal.tolist()]
     sig = list(entry_signal)
     if len(sig) != n_bars:
         raise ValueError(
@@ -143,6 +144,7 @@ def run_backtest(
     commission_pct: float = 0.001,
     slippage_pct: float = 0.0,
     initial_capital: float = 100_000.0,
+    position_fraction: float = 1.0,
     allow_overlap: bool = False,
 ) -> BacktestResult:
     """对一个 stop 跑 triple-barrier 回测。
@@ -158,8 +160,24 @@ def run_backtest(
     commission_pct : 单边佣金
     slippage_pct : 单边滑点
     initial_capital : 起始资金
-    allow_overlap : 已有持仓时是否允许 entry_signal 再触发开新仓
+    position_fraction : 每次开仓使用当前已实现权益的比例，范围 (0, 1]
+    allow_overlap : 保留参数；当前单持仓引擎不支持 True
     """
+    if allow_overlap:
+        raise NotImplementedError(
+            "allow_overlap=True 需要独立 position/stop state，当前单持仓引擎不支持 overlap"
+        )
+    if df.empty:
+        raise ValueError("OHLC 数据为空")
+    if side not in ("long", "short"):
+        raise ValueError(f"side 必须是 long/short，得到 {side}")
+    if initial_capital <= 0:
+        raise ValueError("initial_capital 必须大于 0")
+    if not 0 < position_fraction <= 1:
+        raise ValueError("position_fraction 必须在 (0, 1] 内")
+    if commission_pct < 0 or slippage_pct < 0:
+        raise ValueError("commission_pct 和 slippage_pct 不能为负")
+
     bars = _to_bars(df)
     n = len(bars)
     signals = _resolve_signals(df, entry_signal, n)
@@ -171,7 +189,23 @@ def run_backtest(
     )
 
     equity = initial_capital
-    open_position = None   # {"entry_bar": i, "entry_price": p, "stop": stop instance}
+    open_position = None
+
+    def _marked_equity(mark_price: float) -> float:
+        """按当前收盘价估计平仓后的权益，供逐 bar 风险指标使用。"""
+        if open_position is None:
+            return equity
+        pos = open_position
+        if pos["side"] == "long":
+            adj_exit = mark_price * (1 - slippage_pct)
+            pnl_per = (adj_exit - pos["entry_price"]) * pos["quantity"]
+        else:
+            adj_exit = mark_price * (1 + slippage_pct)
+            pnl_per = (pos["entry_price"] - adj_exit) * pos["quantity"]
+        estimated_commission = (
+            (pos["entry_price"] + adj_exit) * pos["quantity"] * commission_pct
+        )
+        return equity + pnl_per - estimated_commission
 
     def _close(exit_bar: int, exit_price: float, reason: str) -> None:
         nonlocal equity, open_position
@@ -179,14 +213,16 @@ def run_backtest(
         # 滑点 + 佣金
         if pos["side"] == "long":
             adj_exit = exit_price * (1 - slippage_pct)
-            pnl_per = adj_exit - pos["entry_price"]
+            pnl_per = (adj_exit - pos["entry_price"]) * pos["quantity"]
         else:
             adj_exit = exit_price * (1 + slippage_pct)
-            pnl_per = pos["entry_price"] - adj_exit
-        # 简化：每笔交易固定 1 个名义单位（不复利），方便策略对比
-        commission = (pos["entry_price"] + adj_exit) * commission_pct
+            pnl_per = (pos["entry_price"] - adj_exit) * pos["quantity"]
+        commission = (
+            (pos["entry_price"] + adj_exit) * pos["quantity"] * commission_pct
+        )
         pnl = pnl_per - commission
-        pnl_pct = pnl / pos["entry_price"]
+        entry_notional = pos["entry_price"] * pos["quantity"]
+        pnl_pct = pnl / entry_notional
         equity += pnl
 
         result.trades.append(Trade(
@@ -194,7 +230,7 @@ def run_backtest(
             exit_bar=exit_bar, exit_price=adj_exit,
             side=pos["side"], exit_reason=reason,
             n_bars=exit_bar - pos["entry_bar"], pnl=pnl, pnl_pct=pnl_pct,
-            commission=commission,
+            commission=commission, quantity=pos["quantity"],
             final_stop=stop.state.current_stop if stop.state else None,
         ))
         open_position = None
@@ -206,49 +242,60 @@ def run_backtest(
             result.n_timed_out += 1
 
     for i, bar in enumerate(bars):
-        # 第一步：先检查是否需要开仓（如果允许 overlap 或当前无仓）
-        if signals[i] and (open_position is None or allow_overlap):
-            result.n_signals += 1
-            if open_position is None:
-                entry_price = bar.close * (1 + slippage_pct if side == "long"
-                                            else 1 - slippage_pct)
-                stop.reset(side=side, entry_price=entry_price,
-                           entry_bar_index=i)
-                # 关键：把入场前的历史喂给 stop，让 ATR/MA 等暖机
-                for past in bars[:i]:
-                    stop._history.append(past)
-                open_position = {
-                    "entry_bar": i, "entry_price": entry_price, "side": side,
-                }
-
-        # 第二步：如有持仓，喂 bar 检查止损
+        # 先处理在本 bar 开始前已经存在的持仓。止损位只能使用上一收盘前
+        # 已知的信息，不能先读当前 high/low 更新 stop 再回看同一 bar 是否触发。
         if open_position is not None:
-            state = stop.update(bar)
-            # 止损 barrier（含 price-based + time-based 通过 stop.exit_reason 区分）
-            if state.triggered:
-                # 用 stop price 作为退出价（保守估计；实际可能更差）
-                # 时间 stop 没有价格 → 用 bar.close
-                exit_price = (state.current_stop
-                              if state.current_stop is not None
-                              else bar.close)
-                _close(i, exit_price, reason=stop.exit_reason)
-            # 止盈 barrier
+            prior_stop = stop.state.current_stop if stop.state else None
+            stop_hit = False
+            stop_exit = None
+            if stop.exit_reason == "stop" and prior_stop is not None:
+                if side == "long" and bar.low <= prior_stop:
+                    stop_hit = True
+                    stop_exit = bar.open if bar.open <= prior_stop else prior_stop
+                elif side == "short" and bar.high >= prior_stop:
+                    stop_hit = True
+                    stop_exit = bar.open if bar.open >= prior_stop else prior_stop
+
+            # OHLC 无法识别同一 bar 内止损与止盈的先后，采用 stop-first 保守约定。
+            if stop_hit:
+                _close(i, float(stop_exit), reason="stop")
             elif profit_target_pct is not None:
                 ep = open_position["entry_price"]
                 if side == "long" and bar.high >= ep * (1 + profit_target_pct):
-                    _close(i, ep * (1 + profit_target_pct), reason="profit")
+                    target = ep * (1 + profit_target_pct)
+                    _close(i, max(bar.open, target), reason="profit")
                 elif side == "short" and bar.low <= ep * (1 - profit_target_pct):
-                    _close(i, ep * (1 - profit_target_pct), reason="profit")
-            # 时间 barrier（backtest 引擎层面，不是 TimeStop 类层面）
-            elif max_holding_bars is not None and state.n_bars_held >= max_holding_bars:
-                _close(i, bar.close, reason="time")
+                    target = ep * (1 - profit_target_pct)
+                    _close(i, min(bar.open, target), reason="profit")
 
-        result.equity_curve.append(equity)
+            if open_position is not None:
+                state = stop.update(bar)
+                if stop.exit_reason == "time" and state.triggered:
+                    _close(i, bar.close, reason="time")
+                elif (max_holding_bars is not None and
+                      state.n_bars_held >= max_holding_bars):
+                    _close(i, bar.close, reason="time")
+
+        # entry_signal 解释为本 bar 收盘信号；新仓从下一根 bar 起才可能触发。
+        if open_position is None and signals[i] and i < n - 1:
+            result.n_signals += 1
+            entry_price = bar.close * (1 + slippage_pct if side == "long"
+                                        else 1 - slippage_pct)
+            stop.reset(side=side, entry_price=entry_price, entry_bar_index=i)
+            stop.prime_at_entry(bars[:i], bar)
+            quantity = equity * position_fraction / entry_price
+            open_position = {
+                "entry_bar": i, "entry_price": entry_price, "side": side,
+                "quantity": quantity,
+            }
+
+        result.equity_curve.append(_marked_equity(bar.close))
 
     # 回测结束时如还有持仓，按最后收盘平
     if open_position is not None:
         _close(n - 1, bars[-1].close, reason="end")
         result.n_open_at_end += 1
+        result.equity_curve[-1] = equity
 
     result.final_equity = equity
     result.n_trades = len(result.trades)

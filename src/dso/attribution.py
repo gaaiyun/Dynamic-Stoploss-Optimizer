@@ -1,16 +1,12 @@
-"""P/L 归因：区分入场 timing 贡献 vs 止损贡献。
+"""退出实现诊断：实际 P/L 与最大有利变动（MFE）之间的差距。
 
-一个常见误区：策略整体收益差就归咎"停损不好"，但实际可能入场点本来就烂。
-这层把 P/L 分两块：
+这不是因果意义上的“入场贡献 vs 止损贡献”。它只回答：在同一入场和同一
+持仓区间内，实际退出捕获了多少事后可见的最大有利变动。
 
-    P/L = (perfect_exit_pnl) + (stop_pnl_loss)
+    actual_pnl = mfe_net_pnl + realization_gap
 
-其中：
-    perfect_exit_pnl = 假设每笔都按"持仓期间最高点"（long）平仓的 P/L
-    stop_pnl_loss   = 实际 P/L - perfect_exit_pnl（负数，表示停损"失去的"利润）
-
-如果 perfect_exit_pnl 本身很负 → 是入场问题；
-如果 perfect_exit_pnl 强但 stop_pnl_loss 很负 → 是停损太紧 / 太晚。
+MFE 使用入场后的价格区间，排除入场 K 线在收盘前已经发生的 high/low。
+它是事后上界，不证明止损导致了差距，也不能单独评价入场质量。
 """
 from __future__ import annotations
 
@@ -19,18 +15,17 @@ from typing import List
 
 import pandas as pd
 
-from .backtest import BacktestResult, Trade
+from .backtest import BacktestResult
 
 
 @dataclass
 class AttributionReport:
     n_trades: int
     actual_total_pnl: float
-    perfect_total_pnl: float           # 假设每笔都顶峰平仓
-    stop_pnl_loss: float               # 停损相对完美的差
-    entry_contribution_pct: float      # 入场贡献占比
-    stop_contribution_pct: float       # 停损贡献占比
-    avg_pct_of_perfect_captured: float  # 平均每笔捕获了完美收益的几成
+    mfe_total_pnl: float
+    realization_gap_pnl: float
+    aggregate_capture_ratio: float
+    avg_trade_capture_ratio: float
 
     def to_dict(self) -> dict:
         return {k: (float(v) if isinstance(v, float) else v)
@@ -38,64 +33,59 @@ class AttributionReport:
 
 
 def attribute_pnl(result: BacktestResult, df: pd.DataFrame) -> AttributionReport:
-    """从 backtest 结果 + 原始 OHLC 推 perfect-exit 反事实。
+    """计算同一持仓区间内的 MFE 净收益与实际实现差距。
 
-    "Perfect exit" 定义：long 仓在 [entry_bar, exit_bar] 区间内的最高 high；
-    short 仓在该区间的最低 low。
+    long 使用入场后到退出时的最高 high，short 使用最低 low。MFE 扣除与
+    实际交易相同的佣金，但仍是事后最优价上界，不是可交易策略。
     """
     df = df.rename(columns={c: c.lower() for c in df.columns})
     if not result.trades:
         return AttributionReport(
-            n_trades=0, actual_total_pnl=0.0, perfect_total_pnl=0.0,
-            stop_pnl_loss=0.0, entry_contribution_pct=0.0,
-            stop_contribution_pct=0.0, avg_pct_of_perfect_captured=0.0,
+            n_trades=0, actual_total_pnl=0.0, mfe_total_pnl=0.0,
+            realization_gap_pnl=0.0, aggregate_capture_ratio=0.0,
+            avg_trade_capture_ratio=0.0,
         )
 
-    perfect_pnls: List[float] = []
+    mfe_pnls: List[float] = []
     actual_pnls: List[float] = []
     capture_ratios: List[float] = []
 
-    for t in result.trades:
-        # 在 [entry_bar, exit_bar] 内找最优出场价
-        segment = df.iloc[t.entry_bar:max(t.exit_bar + 1, t.entry_bar + 1)]
-        if len(segment) == 0:
-            continue
-        if t.side == "long":
+    for trade in result.trades:
+        start = trade.entry_bar + 1
+        end = max(trade.exit_bar + 1, start + 1)
+        segment = df.iloc[start:end]
+        if segment.empty:
+            # 入场即在样本末尾平仓时，没有入场后的价格区间。
+            mfe = trade.pnl
+        elif trade.side == "long":
             best_exit = float(segment["high"].max())
-            perfect = best_exit - t.entry_price
+            mfe = ((best_exit - trade.entry_price) * trade.quantity -
+                   trade.commission)
         else:
             best_exit = float(segment["low"].min())
-            perfect = t.entry_price - best_exit
+            mfe = ((trade.entry_price - best_exit) * trade.quantity -
+                   trade.commission)
 
-        perfect_pnls.append(perfect)
-        actual_pnls.append(t.pnl)
-
-        if abs(perfect) > 1e-12:
-            capture_ratios.append(t.pnl / perfect)
-        elif abs(t.pnl) < 1e-12:
+        mfe_pnls.append(mfe)
+        actual_pnls.append(trade.pnl)
+        if mfe > 1e-12:
+            capture_ratios.append(trade.pnl / mfe)
+        elif abs(trade.pnl) < 1e-12:
             capture_ratios.append(1.0)
 
-    total_perfect = sum(perfect_pnls)
+    total_mfe = sum(mfe_pnls)
     total_actual = sum(actual_pnls)
-    loss = total_actual - total_perfect    # 通常 ≤ 0
-
-    # 贡献占比
-    abs_total = abs(total_perfect) + abs(loss)
-    if abs_total < 1e-12:
-        entry_pct = 0.0
-        stop_pct = 0.0
-    else:
-        entry_pct = abs(total_perfect) / abs_total
-        stop_pct = abs(loss) / abs_total
+    gap = total_actual - total_mfe
+    aggregate_capture = (total_actual / total_mfe
+                         if abs(total_mfe) > 1e-12 else 0.0)
 
     return AttributionReport(
         n_trades=len(result.trades),
         actual_total_pnl=float(total_actual),
-        perfect_total_pnl=float(total_perfect),
-        stop_pnl_loss=float(loss),
-        entry_contribution_pct=float(entry_pct),
-        stop_contribution_pct=float(stop_pct),
-        avg_pct_of_perfect_captured=(
+        mfe_total_pnl=float(total_mfe),
+        realization_gap_pnl=float(gap),
+        aggregate_capture_ratio=float(aggregate_capture),
+        avg_trade_capture_ratio=(
             float(sum(capture_ratios) / len(capture_ratios))
             if capture_ratios else 0.0
         ),

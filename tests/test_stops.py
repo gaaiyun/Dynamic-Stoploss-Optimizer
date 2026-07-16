@@ -13,10 +13,10 @@ from dso.stops.atr import _wilder_atr
 from dso.stops.moving_average import _ema, _sma
 
 
-def _mkbar(c: float, h: float = None, l: float = None) -> Bar:
+def _mkbar(c: float, h: float = None, low: float = None) -> Bar:
     h = h if h is not None else c * 1.005
-    l = l if l is not None else c * 0.995
-    return Bar(open=c, high=h, low=l, close=c)
+    low = low if low is not None else c * 0.995
+    return Bar(open=c, high=h, low=low, close=c)
 
 
 # --- registry ----------------------------------------------------------
@@ -106,7 +106,7 @@ def test_wilder_atr_short_data_returns_none():
 
 def test_wilder_atr_constant_prices_zero():
     """常数价 → TR 全 0 → ATR = 0。"""
-    bars = [_mkbar(100, h=100, l=100) for _ in range(30)]
+    bars = [_mkbar(100, h=100, low=100) for _ in range(30)]
     atr = _wilder_atr(bars, period=14)
     assert atr == 0.0
 
@@ -115,7 +115,7 @@ def test_wilder_atr_increasing_volatility():
     bars = []
     for i in range(30):
         c = 100 + i
-        bars.append(_mkbar(c, h=c + i * 0.5, l=c - i * 0.5))
+        bars.append(_mkbar(c, h=c + i * 0.5, low=c - i * 0.5))
     atr = _wilder_atr(bars, period=14)
     assert atr is not None and atr > 0
 
@@ -152,9 +152,9 @@ def test_atr_stop_triggers_on_low_break():
     stop = ATRStop(period=2, multiplier=1.0)
     stop.reset(side="long", entry_price=100)
     for _ in range(3):
-        stop.update(_mkbar(100, h=101, l=99))
+        stop.update(_mkbar(100, h=101, low=99))
     # 急跌穿透
-    state = stop.update(_mkbar(80, h=82, l=78))
+    state = stop.update(_mkbar(80, h=82, low=78))
     if stop.state.current_stop is not None:
         if 78 <= stop.state.current_stop:
             assert state.triggered
@@ -165,7 +165,7 @@ def test_atr_stop_triggers_on_low_break():
 def test_chandelier_uses_period_high():
     stop = ChandelierStop(period=5, multiplier=2.0)
     stop.reset(side="long", entry_price=100)
-    bars = [_mkbar(c, h=c + 2, l=c - 2)
+    bars = [_mkbar(c, h=c + 2, low=c - 2)
             for c in [100, 105, 110, 108, 109, 112, 115]]
     for b in bars:
         stop.update(b)
@@ -186,7 +186,7 @@ def test_supertrend_returns_a_value():
     stop = SuperTrendStop(period=5, multiplier=2.0)
     stop.reset(side="long", entry_price=100)
     for c in range(100, 120):
-        stop.update(_mkbar(c, h=c + 1, l=c - 1))
+        stop.update(_mkbar(c, h=c + 1, low=c - 1))
     assert stop.state.current_stop is not None
     assert stop.state.current_stop < 120   # long stop 在价格下方
 
@@ -199,7 +199,7 @@ def test_parabolic_sar_af_increases_with_new_high():
     af_start = stop.state.metadata["af"]
     # 连续创新高 → AF 应增长
     for c in range(100, 110):
-        stop.update(_mkbar(c, h=c + 1, l=c - 1))
+        stop.update(_mkbar(c, h=c + 1, low=c - 1))
     af_later = stop.state.metadata["af"]
     assert af_later > af_start
 
@@ -208,7 +208,7 @@ def test_parabolic_sar_af_capped_at_max():
     stop = ParabolicSARStop(af_init=0.18, af_increment=0.02, af_max=0.20)
     stop.reset(side="long", entry_price=100)
     for c in range(100, 130):
-        stop.update(_mkbar(c, h=c + 1, l=c - 1))
+        stop.update(_mkbar(c, h=c + 1, low=c - 1))
     assert stop.state.metadata["af"] <= 0.20
 
 
@@ -218,7 +218,7 @@ def test_donchian_long_stop_is_period_low():
     stop = DonchianStop(period=5)
     stop.reset(side="long", entry_price=100)
     for c in [100, 95, 98, 99, 97, 100]:
-        stop.update(_mkbar(c, h=c + 1, l=c - 1))
+        stop.update(_mkbar(c, h=c + 1, low=c - 1))
     # 最近 5 bar 的 low = c - 1：最低 95-1=94
     assert stop.state.current_stop == 94
 
@@ -227,7 +227,7 @@ def test_donchian_short_stop_is_period_high():
     stop = DonchianStop(period=5)
     stop.reset(side="short", entry_price=100)
     for c in [100, 105, 102, 101, 103, 100]:
-        stop.update(_mkbar(c, h=c + 1, l=c - 1))
+        stop.update(_mkbar(c, h=c + 1, low=c - 1))
     # 最近 5 bar 的 high = c+1：最高 105+1=106
     assert stop.state.current_stop == 106
 
@@ -295,9 +295,9 @@ def test_max_drawdown_triggers_on_5pct_drop():
     stop = MaxDrawdownStop(max_drawdown_pct=0.05, use_entry_price=False)
     stop.reset(side="long", entry_price=100)
     # 涨到 120 → peak = 120 → stop = 120*0.95 = 114
-    stop.update(_mkbar(120, h=120, l=119))
+    stop.update(_mkbar(120, h=120, low=119))
     # 跌到 110 → 触发
-    state = stop.update(_mkbar(110, h=115, l=110))
+    state = stop.update(_mkbar(110, h=115, low=110))
     assert state.triggered
 
 
@@ -305,7 +305,7 @@ def test_max_drawdown_use_entry_mode():
     stop = MaxDrawdownStop(max_drawdown_pct=0.10, use_entry_price=True)
     stop.reset(side="long", entry_price=100)
     # 即使涨到 200，stop 也应该锁定在 entry * 0.90 = 90
-    stop.update(_mkbar(200, h=201, l=199))
+    stop.update(_mkbar(200, h=201, low=199))
     assert stop.state.current_stop == 90
 
 

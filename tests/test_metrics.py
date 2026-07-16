@@ -138,6 +138,18 @@ def test_dsr_returns_in_unit_interval():
             assert 0.0 <= p <= 1.0
 
 
+def test_dsr_annualization_scale_is_invariant():
+    annualized = deflated_sharpe_ratio(
+        sharpe_observed=1.6, n_trials=20, n_obs=252,
+        periods_per_year=252,
+    )
+    per_period = deflated_sharpe_ratio(
+        sharpe_observed=1.6 / math.sqrt(252), n_trials=20, n_obs=252,
+        periods_per_year=1,
+    )
+    assert annualized == pytest.approx(per_period)
+
+
 def test_dsr_zero_observations_returns_zero():
     p = deflated_sharpe_ratio(sharpe_observed=1.0, n_trials=5, n_obs=1)
     assert p == 0.0

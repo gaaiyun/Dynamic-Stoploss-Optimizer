@@ -18,9 +18,9 @@ def _wilder_atr(history: list[Bar], period: int) -> Optional[float]:
         return None
     trs = []
     for i in range(1, n):
-        h, l = history[i].high, history[i].low
+        high, low = history[i].high, history[i].low
         prev_close = history[i - 1].close
-        trs.append(max(h - l, abs(h - prev_close), abs(l - prev_close)))
+        trs.append(max(high - low, abs(high - prev_close), abs(low - prev_close)))
     # 初始 ATR：前 period 个 TR 的简单平均
     atr = sum(trs[:period]) / period
     # 后续 Wilder 平滑：ATR_n = (ATR_{n-1} × (period-1) + TR_n) / period

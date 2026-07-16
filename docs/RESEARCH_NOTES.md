@@ -2,7 +2,7 @@
 
 整理本仓库每个组件的学界 / 实务界文献来源。读这里之前最好先看 README。
 
-## 1. 8 个停损策略的算法来源
+## 1. 9 个停损策略的算法来源
 
 ### 1.1 ATR Stop（ATRStop）
 
@@ -83,14 +83,21 @@
   vertical barrier 就是时间停损。
 - **本仓库实现**：`src/dso/stops/time_stop.py`。
 
+### 1.9 Max Drawdown Stop（MaxDrawdownStop）
+
+- **来源与边界**：基于开仓后最有利价格回撤阈值的规则型 trailing stop，是常见
+  风控启发式，不把它冒充为某一篇论文的独有算法。
+- **本仓库实现**：`src/dso/stops/max_drawdown.py`。
+
 ## 2. Triple-Barrier 回测
 
 - **来源**：Lopez de Prado (2018) Chapter 3。三个 barrier：
   1. **Lower horizontal barrier**（止损）—— `BaseStop` 提供
   2. **Upper horizontal barrier**（止盈）—— `profit_target_pct` 参数
   3. **Vertical barrier**（时间）—— `max_holding_bars` 参数
-- 任一 barrier 先到即平仓。这与 LdP 的 "meta-labeling" 一致：每笔交易的
-  label = 哪个 barrier 触发了。
+- 任一 barrier 先到即平仓。这里只借鉴三类边界的事件结构，并未实现完整的
+  meta-labeling、side/prediction probability 或逐 tick first-touch 标签。OHLC
+  无法判断同 bar 顺序时，回测采用 stop-first 保守约定。
 - **本仓库实现**：`src/dso/backtest.py::run_backtest`。
 
 ## 3. Walk-Forward 优化
@@ -155,9 +162,12 @@
   rolling-std vs lag），样本量小时不稳定。
 - **本仓库实现**：`src/dso/regime.py::_hurst_exponent`。
 
-### 5.3 Regime → Stop Strategy 映射
+### 5.3 Regime → Stop Strategy 启发式映射
 
-| Regime 标签 | 触发条件 | 推荐停损 | 学术依据 |
+下表是基于指标直觉和策略结构形成的候选清单，不是经过本仓库数据样本外验证的
+“最优推荐”。调用者应在自己的 entry、成本和时间区间上重新比较。
+
+| Regime 标签 | 触发条件 | 候选停损 | 文献与结构依据 |
 |---|---|---|---|
 | `strong_uptrend` | ADX ≥ 25 + +DI > -DI | Chandelier / SuperTrend / PSAR / ATR | trailing 让趋势走（Wilder 1978, Le Beau 1992） |
 | `strong_downtrend` | ADX ≥ 25 + -DI > +DI | 同上（short 仓）| 同上 |
@@ -165,20 +175,19 @@
 | `ranging` | ADX < 20 | Donchian / MaxDD / MA | 横盘窄止损（Turtle 思路） |
 | `high_volatility` | 年化波动 > 40% | Volatility / ATR / MaxDD | 波动自适应 |
 
-## 6. P/L Attribution
+## 6. MFE 实现差距诊断
 
-- **概念来源**：金融绩效归因（Brinson, Hood & Beebower 1986 框架）应用到
-  trade-level 的 entry-vs-exit 拆分。本仓库简化为：
+- **用途**：在固定入场和实际持仓区间内，比较实际净 P/L 与事后最大有利变动
+  （maximum favorable excursion, MFE）对应的净 P/L：
 
   ```
-  perfect_exit_pnl = 假设按"持仓期内最优价"平仓的 P/L
+  mfe_net_pnl = 假设按"入场后持仓期内最有利价"平仓的净 P/L
   actual_pnl = 实际策略 P/L
-  stop_pnl_loss = actual - perfect ≤ 0  (停损 / 提前平仓让出的潜在利润)
+  realization_gap = actual - mfe_net_pnl
   ```
 
-- 这种分解的局限：忽略了"停损保护亏损"的情形（perfect_exit 是反事实最优，
-  不能反映"如果不停损会亏更多"）。但作为"我的停损是不是太紧 / 太晚" 的诊断
-  足够。
+- **边界**：MFE 是事后上界而非可交易反事实，不能拆出“入场贡献”和“止损贡献”，
+  也不能证明差距由止损造成。exit bar 内的价格先后在 OHLC 中仍不可见。
 - **本仓库实现**：`src/dso/attribution.py::attribute_pnl`。
 
 ## 7. 现有库横向对比

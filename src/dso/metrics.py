@@ -97,6 +97,7 @@ def deflated_sharpe_ratio(
     n_obs: int,
     skewness: float = 0.0,
     kurtosis: float = 3.0,
+    periods_per_year: int = 252,
 ) -> float:
     """Deflated Sharpe Ratio（Bailey & Lopez de Prado 2014）。
 
@@ -105,11 +106,12 @@ def deflated_sharpe_ratio(
 
     Parameters
     ----------
-    sharpe_observed : 观测到的 Sharpe（年化）
+    sharpe_observed : 观测到的年化 Sharpe
     n_trials : 测试过的策略数（grid search 的 grid size 也算）
     n_obs : 用了多少 sample 观测
     skewness : 收益分布偏度（默认 0 = 假设正态）
     kurtosis : 收益分布峰度（默认 3 = 正态）
+    periods_per_year : Sharpe 的年化期数；设为 1 表示已是单期尺度
 
     Returns
     -------
@@ -128,6 +130,12 @@ def deflated_sharpe_ratio(
 
     if n_trials < 1 or n_obs < 2:
         return 0.0
+    if periods_per_year < 1:
+        raise ValueError("periods_per_year 必须大于等于 1")
+
+    # 抽样误差在单期 Sharpe 尺度上定义。调用方通常传年化 Sharpe，
+    # 必须先去除年化因子，避免将年化值与单期标准误直接比较。
+    sharpe_period = sharpe_observed / math.sqrt(periods_per_year)
 
     # Step 1: Expected max Sharpe under null（i.i.d. zero-mean）
     e_max_z = _approx_expected_max_z(n_trials)
@@ -136,15 +144,15 @@ def deflated_sharpe_ratio(
 
     # Step 2: 调整非正态性（Bailey-LdP eq. 13）
     # SE(SR) = sqrt((1 - skew*SR + (kurt-1)/4 * SR^2) / (n_obs - 1))
-    sr2 = sharpe_observed ** 2
-    se_sr_sq = (1 - skewness * sharpe_observed +
+    sr2 = sharpe_period ** 2
+    se_sr_sq = (1 - skewness * sharpe_period +
                 (kurtosis - 1) / 4 * sr2) / max(n_obs - 1, 1)
     if se_sr_sq <= 0:
         return 0.0
     se_sr = math.sqrt(se_sr_sq)
 
     # Step 3: DSR = Φ((SR_observed - SR_zero) / SE(SR))
-    z = (sharpe_observed - sr_zero) / se_sr
+    z = (sharpe_period - sr_zero) / se_sr
     return float(norm.cdf(z))
 
 

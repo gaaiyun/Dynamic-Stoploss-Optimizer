@@ -1,6 +1,7 @@
 """市场状态识别（ADX + 波动率 + Hurst）。
 
-不同 regime 下最优停损策略不同：
+不同 regime 可优先比较不同停损候选。映射是解释性启发式，不是经样本外
+验证的“最优策略”结论：
 
 | Regime | 推荐停损 | 理由 |
 |---|---|---|
@@ -17,7 +18,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Literal, Optional
+from typing import List, Literal, Optional
 
 import numpy as np
 import pandas as pd
@@ -51,6 +52,7 @@ class RegimeReport:
                                if self.hurst_exponent is not None else None),
             "realized_vol_annualized": float(self.realized_vol_annualized),
             "recommended_stops": list(self.recommended_stops),
+            "mapping_basis": "heuristic-candidates-not-validated",
             "reasoning": list(self.reasoning),
         }
 
@@ -59,17 +61,21 @@ def _calc_adx_dmi(df: pd.DataFrame, period: int = 14) -> tuple:
     """ADX + +DI + -DI（Wilder 平滑）。返回 (adx, +di, -di)。"""
     if len(df) < period * 2:
         return 0.0, 0.0, 0.0
-    h = df["high"].astype(float).values
-    l = df["low"].astype(float).values
-    c = df["close"].astype(float).values
+    highs = df["high"].astype(float).values
+    lows = df["low"].astype(float).values
+    closes = df["close"].astype(float).values
 
     tr = np.zeros(len(df))
     plus_dm = np.zeros(len(df))
     minus_dm = np.zeros(len(df))
     for i in range(1, len(df)):
-        tr[i] = max(h[i] - l[i], abs(h[i] - c[i - 1]), abs(l[i] - c[i - 1]))
-        up_move = h[i] - h[i - 1]
-        down_move = l[i - 1] - l[i]
+        tr[i] = max(
+            highs[i] - lows[i],
+            abs(highs[i] - closes[i - 1]),
+            abs(lows[i] - closes[i - 1]),
+        )
+        up_move = highs[i] - highs[i - 1]
+        down_move = lows[i - 1] - lows[i]
         plus_dm[i] = up_move if up_move > down_move and up_move > 0 else 0
         minus_dm[i] = down_move if down_move > up_move and down_move > 0 else 0
 
@@ -148,7 +154,7 @@ def _realized_vol(prices: pd.Series, window: int = 20,
 def detect_regime(df: pd.DataFrame, adx_period: int = 14,
                   hurst_max_lag: int = 20,
                   vol_window: int = 20) -> RegimeReport:
-    """从 OHLC DataFrame 推断市场状态 + 推荐 stop 列表。
+    """从 OHLC DataFrame 推断市场状态并给出待比较的 stop 候选列表。
 
     Parameters
     ----------

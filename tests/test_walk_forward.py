@@ -7,27 +7,29 @@ import pytest
 
 from dso.stops import ATRStop
 from dso.walk_forward import (
-    Fold, WalkForwardResult, make_folds, walk_forward,
+    WalkForwardResult, make_folds, walk_forward,
 )
 
 
 # --- make_folds ----------------------------------------------------
 
 def test_make_folds_anchored_count():
-    folds = make_folds(300, n_folds=4, mode="anchored")
+    folds = make_folds(300, n_folds=4, train_ratio=0.7, mode="anchored")
     assert len(folds) == 4
     # anchored：所有 train 都从 0 开始
     assert all(f.train_start == 0 for f in folds)
     # train_end 单调递增
     for i in range(1, 4):
         assert folds[i].train_end > folds[i - 1].train_end
+    assert folds[0].train_end == 210
+    assert folds[-1].test_end == 300
 
 
 def test_make_folds_rolling_window_constant_train_length():
     folds = make_folds(500, n_folds=4, mode="rolling", train_ratio=0.7)
     train_lengths = [f.train_end - f.train_start for f in folds]
     # rolling 的 train 长度应该一致
-    assert all(l == train_lengths[0] for l in train_lengths)
+    assert all(length == train_lengths[0] for length in train_lengths)
 
 
 def test_make_folds_rejects_invalid():
@@ -108,3 +110,24 @@ def test_walk_forward_skips_too_short_folds():
     result = walk_forward(df, ATRStop, grid, n_folds=5)
     # 不强制要求多少 fold，但至少不应该崩
     assert isinstance(result, WalkForwardResult)
+
+
+def test_walk_forward_respects_entry_signal(synth_mixed_df):
+    grid = {"period": [10], "multiplier": [2.5]}
+    no_entries = [False] * len(synth_mixed_df)
+    result = walk_forward(
+        synth_mixed_df, ATRStop, grid, n_folds=3,
+        entry_signal=no_entries,
+    )
+    assert result.folds
+    assert all(f.test_total_return == 0.0 for f in result.folds)
+    assert result.mean_train_score == 0.0
+    assert result.mean_test_score == 0.0
+
+
+def test_walk_forward_rejects_empty_parameter_values(synth_mixed_df):
+    with pytest.raises(ValueError, match="param_grid"):
+        walk_forward(
+            synth_mixed_df, ATRStop,
+            {"period": [], "multiplier": [2.5]}, n_folds=2,
+        )

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from itertools import product
-from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 import numpy as np
 import pandas as pd
@@ -97,26 +97,26 @@ def make_folds(n: int, n_folds: int = 5, train_ratio: float = 0.7,
     if not 0 < train_ratio < 1:
         raise ValueError("train_ratio ∈ (0, 1)")
 
+    initial_train = int(n * train_ratio)
+    remaining = n - initial_train
+    if initial_train < 1 or remaining < n_folds:
+        raise ValueError("数据不足以按 train_ratio 和 n_folds 切分")
+    test_size = remaining // n_folds
+
     folds = []
     if mode == "anchored":
-        segment = n // (n_folds + 1)
         for k in range(n_folds):
-            tr_end = segment * (k + 1)
-            te_end = min(segment * (k + 2), n)
+            te_start = initial_train + k * test_size
+            te_end = n if k == n_folds - 1 else te_start + test_size
             folds.append(Fold(
-                fold_idx=k, train_start=0, train_end=tr_end,
-                test_start=tr_end, test_end=te_end,
+                fold_idx=k, train_start=0, train_end=te_start,
+                test_start=te_start, test_end=te_end,
             ))
     elif mode == "rolling":
-        total_segs = n_folds + 1
-        seg = n // total_segs
-        train_len = max(int(seg * train_ratio / (1 - train_ratio)), seg)
         for k in range(n_folds):
-            te_start = train_len + k * seg
-            te_end = min(te_start + seg, n)
-            tr_start = max(te_start - train_len, 0)
-            if te_start >= n:
-                break
+            te_start = initial_train + k * test_size
+            te_end = n if k == n_folds - 1 else te_start + test_size
+            tr_start = te_start - initial_train
             folds.append(Fold(
                 fold_idx=k, train_start=tr_start, train_end=te_start,
                 test_start=te_start, test_end=te_end,
@@ -133,6 +133,7 @@ def _evaluate_params(
     max_holding_bars: Optional[int],
     commission_pct: float, slippage_pct: float,
     initial_capital: float, periods_per_year: int,
+    position_fraction: float,
 ) -> Tuple[float, BacktestResult]:
     stop = stop_class(**params)
     if entry_signal is not None:
@@ -149,6 +150,7 @@ def _evaluate_params(
         commission_pct=commission_pct,
         slippage_pct=slippage_pct,
         initial_capital=initial_capital,
+        position_fraction=position_fraction,
     )
     rets = returns_from_equity(result.equity_curve)
     score = sharpe_ratio(rets, periods_per_year=periods_per_year)
@@ -170,6 +172,7 @@ def walk_forward(
     commission_pct: float = 0.001,
     slippage_pct: float = 0.0,
     initial_capital: float = 100_000.0,
+    position_fraction: float = 1.0,
     periods_per_year: int = 252,
 ) -> WalkForwardResult:
     """对一个停损策略类做 walk-forward 优化。
@@ -180,6 +183,13 @@ def walk_forward(
     param_grid : 例如 ``{"period": [10, 14, 20], "multiplier": [2.0, 2.5, 3.0]}``
     """
     n = len(df)
+    if not param_grid or any(not values for values in param_grid.values()):
+        raise ValueError("param_grid 每个参数都必须至少提供一个候选值")
+    signal_values = None
+    if entry_signal is not None:
+        signal_values = list(entry_signal)
+        if len(signal_values) != n:
+            raise ValueError("entry_signal 长度必须与 df 一致")
     folds = make_folds(n, n_folds=n_folds, train_ratio=train_ratio, mode=mode)
 
     keys = list(param_grid.keys())
@@ -192,6 +202,10 @@ def walk_forward(
     for fold in folds:
         train_df = df.iloc[fold.train_start:fold.train_end].reset_index(drop=True)
         test_df = df.iloc[fold.test_start:fold.test_end].reset_index(drop=True)
+        train_signal = (signal_values[fold.train_start:fold.train_end]
+                        if signal_values is not None else None)
+        test_signal = (signal_values[fold.test_start:fold.test_end]
+                       if signal_values is not None else None)
         if len(train_df) < 30 or len(test_df) < 5:
             continue
 
@@ -202,13 +216,14 @@ def walk_forward(
             params = dict(zip(keys, combo))
             try:
                 score, _ = _evaluate_params(
-                    train_df, stop_class, params, entry_signal=None,
+                    train_df, stop_class, params, entry_signal=train_signal,
                     side=side, profit_target_pct=profit_target_pct,
                     max_holding_bars=max_holding_bars,
                     commission_pct=commission_pct,
                     slippage_pct=slippage_pct,
                     initial_capital=initial_capital,
                     periods_per_year=periods_per_year,
+                    position_fraction=position_fraction,
                 )
             except Exception:
                 score = -np.inf
@@ -219,13 +234,14 @@ def walk_forward(
         # ----- test: 用最佳参数评估 -----
         try:
             test_score, test_bt = _evaluate_params(
-                test_df, stop_class, best_params, entry_signal=None,
+                test_df, stop_class, best_params, entry_signal=test_signal,
                 side=side, profit_target_pct=profit_target_pct,
                 max_holding_bars=max_holding_bars,
                 commission_pct=commission_pct,
                 slippage_pct=slippage_pct,
                 initial_capital=initial_capital,
                 periods_per_year=periods_per_year,
+                position_fraction=position_fraction,
             )
         except Exception:
             test_score = -np.inf

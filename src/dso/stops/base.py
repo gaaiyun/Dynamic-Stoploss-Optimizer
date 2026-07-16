@@ -130,6 +130,23 @@ class BaseStop(ABC):
         self.state.triggered = self._check_triggered(bar)
         return self.state
 
+    def prime_at_entry(self, history: list[Bar], entry_bar: Bar) -> StopState:
+        """用截至入场收盘可见的历史建立下一根 K 线使用的止损位。
+
+        入场价按 ``entry_bar.close`` 形成，因此该 K 线的 high/low 不能再反过来
+        触发这笔新仓。这里更新指标与止损状态，但不增加持仓 bar 数，也不做
+        触发判断。
+        """
+        if self.state is None:
+            raise RuntimeError("先调 reset(side, entry_price) 才能 prime")
+        self._history = [*history, entry_bar]
+        new_stop = self._update_stop(entry_bar)
+        if new_stop is not None:
+            self.state.current_stop = self._tighten(new_stop)
+        self.state.triggered = False
+        self.state.n_bars_held = 0
+        return self.state
+
     @abstractmethod
     def _update_stop(self, bar: Bar) -> Optional[float]:
         """子类必须实现：根据当前 bar 算出新的止损价。

@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import pandas as pd
 
-from dso.attribution import AttributionReport, attribute_pnl
+from dso.attribution import attribute_pnl
 from dso.backtest import run_backtest
 from dso.stops import ATRStop
 
@@ -16,7 +16,7 @@ def test_attribute_empty_backtest_safe(synth_mixed_df):
     rep = attribute_pnl(result, synth_mixed_df)
     assert rep.n_trades == 0
     assert rep.actual_total_pnl == 0
-    assert rep.perfect_total_pnl == 0
+    assert rep.mfe_total_pnl == 0
 
 
 def test_attribute_with_trades_records_n_trades(synth_mixed_df):
@@ -25,31 +25,27 @@ def test_attribute_with_trades_records_n_trades(synth_mixed_df):
     assert rep.n_trades == result.n_trades
 
 
-def test_perfect_pnl_at_least_actual(synth_mixed_df):
-    """完美出场点 P/L 不会比实际更差（理论上 ≥）。"""
+def test_mfe_pnl_at_least_actual(synth_mixed_df):
+    """最大有利变动净收益不应比实际退出更差。"""
     result = run_backtest(synth_mixed_df, ATRStop())
     rep = attribute_pnl(result, synth_mixed_df)
     if rep.n_trades > 0:
-        # perfect_total >= actual_total（perfect 是最优 exit，actual 是实际 exit）
-        # 但加上佣金成本可能让 actual 略低
-        assert rep.perfect_total_pnl >= rep.actual_total_pnl - 0.1
+        assert rep.mfe_total_pnl >= rep.actual_total_pnl - 0.1
 
 
-def test_stop_pnl_loss_is_negative_or_zero(synth_mixed_df):
-    """实际 - perfect ≤ 0（停损让出了一部分潜在利润）。"""
+def test_realization_gap_is_negative_or_zero(synth_mixed_df):
+    """实际收益减 MFE 净收益应小于等于零。"""
     result = run_backtest(synth_mixed_df, ATRStop())
     rep = attribute_pnl(result, synth_mixed_df)
     if rep.n_trades > 0:
-        assert rep.stop_pnl_loss <= 0.01    # 允许浮点误差
+        assert rep.realization_gap_pnl <= 0.01
 
 
-def test_attribution_contribution_pcts_sum_to_one_or_zero(synth_mixed_df):
+def test_aggregate_capture_ratio_is_finite(synth_mixed_df):
     result = run_backtest(synth_mixed_df, ATRStop())
     rep = attribute_pnl(result, synth_mixed_df)
-    if rep.entry_contribution_pct > 0 or rep.stop_contribution_pct > 0:
-        # 加起来应该是 1
-        total = rep.entry_contribution_pct + rep.stop_contribution_pct
-        assert abs(total - 1.0) < 1e-9
+    import math
+    assert math.isfinite(rep.aggregate_capture_ratio)
 
 
 def test_attribute_to_dict_serializable(synth_mixed_df):
@@ -66,4 +62,16 @@ def test_attribute_capture_ratio_reasonable(synth_mixed_df):
     if rep.n_trades > 0:
         # 平均捕获率不应该是 NaN
         import math
-        assert math.isfinite(rep.avg_pct_of_perfect_captured)
+        assert math.isfinite(rep.avg_trade_capture_ratio)
+
+
+def test_entry_bar_high_is_not_treated_as_post_entry_mfe():
+    df = pd.DataFrame({
+        "open": [100, 100], "high": [150, 102],
+        "low": [90, 99], "close": [100, 101], "volume": [1, 1],
+    })
+    result = run_backtest(
+        df, ATRStop(period=14), entry_signal=[True, False], commission_pct=0.0,
+    )
+    rep = attribute_pnl(result, df)
+    assert rep.mfe_total_pnl == 2_000.0
